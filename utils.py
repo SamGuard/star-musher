@@ -36,7 +36,7 @@ def get_kerns(size=9):
     y = x.transpose(dim0=1, dim1=0)
     energy = torch.ones_like(x) / (size**2)
     basline = torch.asarray(gkern(size * 2 + 1, 2.0), dtype=torch.float32, device=DEVICE)
-    basline -= basline.mean()
+    basline -= basline.median()
     return x, y, energy, basline
 
 

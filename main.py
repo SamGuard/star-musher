@@ -18,14 +18,34 @@ G_LIST: List[torch.Tensor] = [
     .permute(2, 0, 1)
     for i in range(6)
 ]
-print(G_LIST[0].shape)
+
+
+def too_close(dots: torch.Tensor):
+    n_dots = dots.shape[1]
+    for i in range(n_dots):
+        d = dots[:, i]
+        if d[0].item() == -1 or d[1].item() == -1:
+            continue
+        dist = ((dots - d.unsqueeze(1).expand((-1, n_dots))) ** 2).sum(dim=0).sqrt()
+        is_too_close = dist < 10.0
+        is_too_close[i] = False
+        dots[:, is_too_close.nonzero()] = -1.0
+    dots = dots[:, (dots[0] > 0.0).nonzero().squeeze()]
+    return dots
+
+
+def feature_extract(dots: torch.Tensor, d_index: torch.Tensor):
+    n_dots = dots.shape[1]
+    n_attr = 5
+    d: torch.Tensor = dots[:, d_index].squeeze()
+    dist = ((dots - d.unsqueeze(1).expand((-1, n_dots))) ** 2).sum(dim=0).sqrt()
+
+    close_stars: torch.Tensor = dots[:, dist.argsort()][:, 1 : n_attr + 1]
+    print(close_stars)
 
 
 # Detect stars
 def star_detect(rgb_img: torch.Tensor):
-    # Consts, probs should be somewhere uniform
-    NUM_DOTS = 1000000
-    LUM_THRESH = 0.25
     # Convert to BW image and squash
     img = rgb_img.to(device=DEVICE)
     img = img.sum(dim=0) / (3 * img.max())
@@ -105,7 +125,7 @@ def star_detect(rgb_img: torch.Tensor):
         dots[1] = (dots[1] + diff_y).clamp(0, dims[1] - 1)
 
     dot_energy: torch.Tensor = img_energy[dots[0], dots[1]]
-    e_threshhold = torch.quantile(dot_energy, 0.95)
+    e_threshhold = torch.quantile(dot_energy, 0.99)
 
     is_high_energy = dot_energy.ge(e_threshhold)
     high_energy_dots = torch.stack(
@@ -114,6 +134,10 @@ def star_detect(rgb_img: torch.Tensor):
     )
     print(is_high_energy.sum())
     print(high_energy_dots.shape)
+
+    high_energy_dots = too_close(high_energy_dots)
+    print(f"Filtered shape={high_energy_dots.shape}")
+    feature_extract(high_energy_dots, 0)
 
     plt.figure(0)
     plt.imshow(img_grad_x.cpu())
